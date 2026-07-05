@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>บันทึกผลการทดลอง: ลูกตุ้มอย่างง่าย</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Sarabun', sans-serif; }
+        input[type="number"] {
+            transition: all 0.3s ease;
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #e5e7eb;
+            border-radius: 0.75rem;
+            text-align: center;
+        }
+        input[type="number"]:focus {
+            outline: none;
+            border-color: #10b981; /* สีเขียว */
+            box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.2);
+        }
+        .highlight-input:focus {
+            border-color: #f97316 !important; /* สีแสดสำหรับช่องที่เด็กต้องคำนวณเอง */
+            box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.2) !important;
+        }
+    </style>
+</head>
+<body class="bg-orange-50/30 text-gray-700 min-h-screen p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto space-y-6">
+        
+        <div id="export-area" class="bg-white p-6 md:p-10 rounded-3xl shadow-sm border border-emerald-100 space-y-8">
+            
+            <header class="text-center space-y-2 mb-8">
+                <h1 class="text-3xl font-bold text-orange-600 tracking-wide">รายงานผลการทดลอง: ลูกตุ้มอย่างง่าย</h1>
+                <div class="flex justify-center gap-4 mt-4">
+                    <input type="text" placeholder="ชื่อ-นามสกุล / กลุ่มที่" class="border-b-2 border-emerald-300 focus:outline-none focus:border-orange-500 text-center px-4 py-1 w-64">
+                </div>
+            </header>
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-8">
+                <div class="space-y-4">
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-8 bg-emerald-500 rounded-full"></div>
+                        <h2 class="text-xl font-semibold text-gray-800">1. ตารางบันทึกผล</h2>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead>
+                                <tr class="border-b-2 border-orange-200 text-orange-700">
+                                    <th class="pb-3 font-semibold w-1/5 text-center">L (m)</th>
+                                    <th class="pb-3 font-semibold text-center" colspan="3">เวลาแกว่ง 10 รอบ (s)</th>
+                                    <th class="pb-3 font-semibold text-center w-1/5 text-emerald-600">T (s)</th>
+                                    <th class="pb-3 font-semibold text-center w-1/5 text-emerald-600">T² (s²)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="data-table" class="divide-y divide-gray-50">
+                                <script>
+                                    for(let i=0; i<5; i++) {
+                                        document.write(`
+                                        <tr class="data-row hover:bg-orange-50/50 transition duration-200">
+                                            <td class="py-2 px-1"><input type="number" step="0.01" class="length-input bg-gray-50"></td>
+                                            <td class="py-2 px-1"><input type="number" step="0.01" class="t1-input"></td>
+                                            <td class="py-2 px-1"><input type="number" step="0.01" class="t2-input"></td>
+                                            <td class="py-2 px-1"><input type="number" step="0.01" class="t3-input"></td>
+                                            <td class="py-2 px-1"><input type="number" step="0.001" class="t-input highlight-input bg-emerald-50/30"></td>
+                                            <td class="py-2 px-1"><input type="number" step="0.001" class="t-squared-input highlight-input bg-orange-50/50"></td>
+                                        </tr>
+                                        `);
+                                    }
+                                </script>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="space-y-6">
+                    <div class="flex items-center gap-3">
+                        <div class="w-3 h-8 bg-orange-500 rounded-full"></div>
+                        <h2 class="text-xl font-semibold text-gray-800">2. การวิเคราะห์กราฟ</h2>
+                    </div>
+                    
+                    <div class="flex gap-4">
+                        <button id="btn-plot-t" class="flex-1 py-2 px-4 rounded-xl border-2 border-emerald-500 text-emerald-600 font-medium transition hover:bg-emerald-50">
+                            กราฟ L กับ T
+                        </button>
+                        <button id="btn-plot-t2" class="flex-1 py-2 px-4 rounded-xl border-2 border-orange-500 bg-orange-50 text-orange-600 font-medium transition hover:bg-orange-100">
+                            กราฟ L กับ T²
+                        </button>
+                    </div>
+
+                    <div class="border border-emerald-100 p-2 rounded-2xl bg-white">
+                        <div id="plot-area" class="w-full h-72 rounded-xl overflow-hidden"></div>
+                    </div>
+
+                    <div id="equation-card" class="bg-emerald-50 p-4 rounded-2xl border border-emerald-200 text-center">
+                        <h3 class="text-xs font-semibold text-emerald-800 uppercase tracking-widest mb-1">สมการเส้นตรงที่ได้จากการทดลอง</h3>
+                        <div class="text-xl font-bold text-orange-600" id="equation-text">
+                            รอข้อมูลการทดลอง...
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-wrap justify-center gap-4 pt-4">
+            <button onclick="exportCSV()" class="flex items-center gap-2 px-6 py-3 bg-white border-2 border-gray-300 text-gray-700 font-medium rounded-full shadow-sm hover:bg-gray-50 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                โหลด CSV
+            </button>
+            <button onclick="exportPNG()" class="flex items-center gap-2 px-6 py-3 bg-emerald-500 text-white font-medium rounded-full shadow-md hover:bg-emerald-600 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+                บันทึกเป็นรูปภาพ (PNG)
+            </button>
+            <button onclick="exportPDF()" class="flex items-center gap-2 px-6 py-3 bg-orange-500 text-white font-medium rounded-full shadow-md hover:bg-orange-600 transition">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                พิมพ์รายงาน (PDF)
+            </button>
+        </div>
+
+    </div>
+
+    <script>
+        let currentMode = 'T2'; 
+
+        // ฟังก์ชันหารากเส้นตรงที่ดีที่สุด
+        function linearRegression(x, y) {
+            let n = x.length;
+            let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
+            for (let i = 0; i < n; i++) {
+                sumX += x[i];
+                sumY += y[i];
+                sumXY += x[i] * y[i];
+                sumXX += x[i] * x[i];
+            }
+            let slope = (n * sumXY - sumX * sumY) / (n * sumXX - sumX * sumX);
+            let intercept = (sumY - slope * sumX) / n;
+            return { slope, intercept };
+        }
+
+        // อ่านค่าจากที่นักเรียนกรอก เพื่ออัปเดตกราฟ
+        function updateGraphFromInputs() {
+            const rows = document.querySelectorAll('.data-row');
+            let L_data = [], T_data = [], T2_data = [];
+
+            rows.forEach(row => {
+                let L = parseFloat(row.querySelector('.length-input').value);
+                let T = parseFloat(row.querySelector('.t-input').value);
+                let T2 = parseFloat(row.querySelector('.t-squared-input').value);
+
+                if (!isNaN(L) && !isNaN(T) && !isNaN(T2)) {
+                    L_data.push(L);
+                    T_data.push(T);
+                    T2_data.push(T2);
+                }
+            });
+
+            renderPlot(L_data, T_data, T2_data);
+        }
+
+        // ฟังก์ชันวาดกราฟ Plotly
+        function renderPlot(L, T, T2) {
+            let plotData = [];
+            let layout = {
+                margin: { t: 10, b: 40, l: 40, r: 10 },
+                paper_bgcolor: 'rgba(0,0,0,0)',
+                plot_bgcolor: 'rgba(0,0,0,0)',
+                font: { family: 'Sarabun, sans-serif' },
+                xaxis: { title: 'L (m)', gridcolor: '#ecfdf5', zerolinecolor: '#ecfdf5' },
+                yaxis: { gridcolor: '#ecfdf5', zerolinecolor: '#ecfdf5' }
+            };
+
+            const eqCard = document.getElementById('equation-card');
+            const eqText = document.getElementById('equation-text');
+
+            if (L.length === 0) {
+                Plotly.newPlot('plot-area', [], layout, {displayModeBar: false});
+                eqText.innerHTML = "รอข้อมูลการทดลอง...";
+                return;
+            }
+
+            if (currentMode === 'T') {
+                layout.yaxis.title = 'T (s)';
+                plotData.push({
+                    x: L, y: T,
+                    mode: 'markers+lines',
+                    type: 'scatter',
+                    line: { shape: 'spline', color: '#10b981', width: 2 },
+                    marker: { size: 8, color: '#f97316' },
+                    name: 'ข้อมูล'
+                });
+                eqCard.style.display = 'none'; 
+            } else {
+                layout.yaxis.title = 'T² (s²)';
+                let reg = linearRegression(L, T2);
+                
+                let lineX = [Math.min(...L)*0.8, Math.max(...L)*1.1];
+                let lineY = lineX.map(x => reg.slope * x + reg.intercept);
+
+                plotData.push({
+                    x: lineX, y: lineY,
+                    mode: 'lines',
+                    type: 'scatter',
+                    line: { color: '#10b981', width: 2, dash: 'dash' },
+                    name: 'Best-fit'
+                });
+
+                plotData.push({
+                    x: L, y: T2,
+                    mode: 'markers',
+                    type: 'scatter',
+                    marker: { size: 8, color: '#f97316' },
+                    name: 'ผลทดลอง'
+                });
+
+                let sign = reg.intercept >= 0 ? '+' : '-';
+                eqText.innerHTML = `T² = ${reg.slope.toFixed(4)} L ${sign} ${Math.abs(reg.intercept).toFixed(4)}`;
+                eqCard.style.display = 'block';
+            }
+
+            Plotly.newPlot('plot-area', plotData, layout, {displayModeBar: false, responsive: true});
+        }
+
+        // --- ฟังก์ชัน Export ---
+
+        // 1. ดาวน์โหลดเป็น CSV
+        function exportCSV() {
+            let csvContent = "data:text/csv;charset=utf-8,\uFEFF"; 
+            csvContent += "L (m),t1 (s),t2 (s),t3 (s),T (s),T^2 (s^2)\n";
+
+            document.querySelectorAll('.data-row').forEach(row => {
+                let l = row.querySelector('.length-input').value || "";
+                let t1 = row.querySelector('.t1-input').value || "";
+                let t2 = row.querySelector('.t2-input').value || "";
+                let t3 = row.querySelector('.t3-input').value || "";
+                let t = row.querySelector('.t-input').value || "";
+                let t2_val = row.querySelector('.t-squared-input').value || "";
+                csvContent += `${l},${t1},${t2},${t3},${t},${t2_val}\n`;
+            });
+
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", "lab_pendulum.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // 2. ดาวน์โหลดเป็นรูปภาพ PNG
+        function exportPNG() {
+            const element = document.getElementById('export-area');
+            html2canvas(element, { scale: 2 }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = 'lab_pendulum.png';
+                link.href = canvas.toDataURL("image/png");
+                link.click();
+            });
+        }
+
+        // 3. ดาวน์โหลดเป็น PDF
+        function exportPDF() {
+            const element = document.getElementById('export-area');
+            const opt = {
+                margin:       0.5,
+                filename:     'lab_pendulum.pdf',
+                image:        { type: 'jpeg', quality: 0.98 },
+                html2canvas:  { scale: 2, useCORS: true },
+                jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
+            };
+            html2pdf().set(opt).from(element).save();
+        }
+
+        // ตั้งค่า Event Listeners
+        document.getElementById('data-table').addEventListener('input', updateGraphFromInputs);
+
+        const btnT = document.getElementById('btn-plot-t');
+        const btnT2 = document.getElementById('btn-plot-t2');
+
+        btnT.addEventListener('click', () => {
+            currentMode = 'T';
+            btnT.className = "flex-1 py-2 px-4 rounded-xl border-2 border-emerald-500 bg-emerald-50 text-emerald-600 font-medium transition";
+            btnT2.className = "flex-1 py-2 px-4 rounded-xl border-2 border-orange-200 text-orange-500 font-medium transition hover:bg-orange-50";
+            updateGraphFromInputs();
+        });
+
+        btnT2.addEventListener('click', () => {
+            currentMode = 'T2';
+            btnT2.className = "flex-1 py-2 px-4 rounded-xl border-2 border-orange-500 bg-orange-50 text-orange-600 font-medium transition";
+            btnT.className = "flex-1 py-2 px-4 rounded-xl border-2 border-emerald-200 text-emerald-500 font-medium transition hover:bg-emerald-50";
+            updateGraphFromInputs();
+        });
+
+        // วาดกราฟว่างเริ่มต้น
+        updateGraphFromInputs();
+    </script>
+</body>
+</html>
