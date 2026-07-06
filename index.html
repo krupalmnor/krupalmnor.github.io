@@ -7,7 +7,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Sarabun', sans-serif; }
@@ -253,28 +253,108 @@
             document.body.removeChild(link);
         }
 
-        // 2. ดาวน์โหลดเป็นรูปภาพ PNG
-        function exportPNG() {
-            const element = document.getElementById('export-area');
-            html2canvas(element, { scale: 2 }).then(canvas => {
-                const link = document.createElement('a');
-                link.download = 'lab_pendulum.png';
-                link.href = canvas.toDataURL("image/png");
-                link.click();
+        // เหตุผลของฟังก์ชันนี้:
+        // html2canvas วาดค่าใน <input> ได้ไม่แม่นเรื่องตำแหน่งแนวตั้ง (บั๊กที่รู้กันของ html2canvas)
+        // ยิ่งกล่องมี padding/border-radius เอง ยิ่งทำให้ตัวเลขดูเหมือน "ตกกรอบ"
+        // วิธีแก้ที่นิ่งที่สุดคือสลับ <input> เป็น <span> ที่โชว์ค่าเดิม ก่อน capture แล้วค่อยสลับกลับ
+        function swapInputsForCapture() {
+            const inputs = Array.from(document.querySelectorAll('#export-area input'));
+            const restoreList = [];
+
+            inputs.forEach(input => {
+                const cs = getComputedStyle(input);
+                const span = document.createElement('span');
+                span.textContent = input.value || '';
+
+                // ทำให้หน้าตาเหมือนกล่องเดิมทุกประการ แต่วาดด้วย text node ธรรมดา
+                span.style.display = 'inline-flex';
+                span.style.alignItems = 'center';
+                span.style.justifyContent = cs.textAlign === 'center' ? 'center' : 'flex-start';
+                span.style.boxSizing = 'border-box';
+                span.style.width = cs.width;
+                span.style.height = cs.height;
+                span.style.padding = cs.padding;
+                span.style.border = cs.border;
+                span.style.borderRadius = cs.borderRadius;
+                span.style.background = cs.backgroundColor;
+                span.style.color = cs.color;
+                span.style.fontSize = cs.fontSize;
+                span.style.fontFamily = cs.fontFamily;
+                span.style.fontWeight = cs.fontWeight;
+                span.style.whiteSpace = 'nowrap';
+                span.style.overflow = 'hidden';
+
+                input.insertAdjacentElement('afterend', span);
+                input.style.display = 'none';
+                restoreList.push({ input, span });
             });
+
+            return function restore() {
+                restoreList.forEach(({ input, span }) => {
+                    input.style.display = '';
+                    span.remove();
+                });
+            };
+        }
+
+        // capture element เดียวกันทุกครั้งด้วยความกว้างคงที่ (windowWidth)
+        // เพื่อไม่ให้ผลลัพธ์เปลี่ยนไปตามขนาดจอ/อุปกรณ์ของแต่ละคน
+        async function captureExportArea() {
+            await document.fonts.ready; // รอฟอนต์ Sarabun โหลดเสร็จก่อน ไม่งั้น metrics ตัวอักษรจะคลาดเคลื่อน
+            const element = document.getElementById('export-area');
+            const restore = swapInputsForCapture();
+            try {
+                const canvas = await html2canvas(element, {
+                    scale: 2,
+                    useCORS: true,
+                    windowWidth: 1440,
+                    backgroundColor: '#ffffff'
+                });
+                return canvas;
+            } finally {
+                restore();
+            }
+        }
+
+        // 2. ดาวน์โหลดเป็นรูปภาพ PNG
+        async function exportPNG() {
+            const canvas = await captureExportArea();
+            const link = document.createElement('a');
+            link.download = 'lab_pendulum.png';
+            link.href = canvas.toDataURL('image/png');
+            link.click();
         }
 
         // 3. ดาวน์โหลดเป็น PDF
-        function exportPDF() {
-            const element = document.getElementById('export-area');
-            const opt = {
-                margin:       0.5,
-                filename:     'lab_pendulum.pdf',
-                image:        { type: 'jpeg', quality: 0.98 },
-                html2canvas:  { scale: 2, useCORS: true },
-                jsPDF:        { unit: 'in', format: 'a4', orientation: 'landscape' }
-            };
-            html2pdf().set(opt).from(element).save();
+        // สร้าง PDF เอง (ไม่พึ่งการแบ่งหน้าอัตโนมัติของ html2pdf) แล้ว "ย่อภาพให้พอดี" หน้า A4 หน้าเดียว
+        // เพื่อไม่ให้เนื้อหาถูกตัดกลางตาราง/กราฟ และให้สัดส่วนตรงกับกระดาษจริงเสมอ
+        async function exportPDF() {
+            const canvas = await captureExportArea();
+            const imgData = canvas.toDataURL('image/jpeg', 0.98);
+
+            const { jsPDF } = window.jspdf;
+            const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'landscape' });
+
+            const pageWidth = pdf.internal.pageSize.getWidth();
+            const pageHeight = pdf.internal.pageSize.getHeight();
+            const margin = 10; // mm
+            const maxWidth = pageWidth - margin * 2;
+            const maxHeight = pageHeight - margin * 2;
+
+            const imgRatio = canvas.width / canvas.height;
+            let renderWidth = maxWidth;
+            let renderHeight = renderWidth / imgRatio;
+
+            if (renderHeight > maxHeight) {
+                renderHeight = maxHeight;
+                renderWidth = renderHeight * imgRatio;
+            }
+
+            const x = (pageWidth - renderWidth) / 2;
+            const y = (pageHeight - renderHeight) / 2;
+
+            pdf.addImage(imgData, 'JPEG', x, y, renderWidth, renderHeight);
+            pdf.save('lab_pendulum.pdf');
         }
 
         // ตั้งค่า Event Listeners
